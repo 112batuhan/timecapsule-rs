@@ -8,8 +8,8 @@ use std::time::Duration;
 
 use api::authentication::{auto_login, check_session_token, login, logout, sign_up};
 use api::emails::{
-    check_email_owner, create_email, delete_email, duplicate_email, get_emails, send_demo_email,
-    update_email,
+    check_email_owner, create_email, delete_email, duplicate_email, get_emails, hide_email,
+    send_demo_email, update_email,
 };
 use api::SharedState;
 use axum::error_handling::HandleErrorLayer;
@@ -54,7 +54,7 @@ async fn main() {
     let governor_conf = Box::new(
         GovernorConfigBuilder::default()
             .per_second(1)
-            .burst_size(5)
+            .burst_size(10)
             .key_extractor(SmartIpKeyExtractor)
             .use_headers()
             .finish()
@@ -62,6 +62,7 @@ async fn main() {
     );
 
     let app = Router::new()
+        .route("/email/:email_id/hide", patch(hide_email))
         .route("/email/:email_id/duplicate", get(duplicate_email))
         .route("/email/:email_id/send", get(send_demo_email))
         .route("/email/:email_id", patch(update_email).delete(delete_email))

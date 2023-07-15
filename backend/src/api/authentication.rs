@@ -6,7 +6,6 @@ use axum::http::{HeaderMap, Request};
 use axum::response::{IntoResponse, Response};
 use axum::{Extension, Json};
 use email_address::*;
-use itertools::Itertools;
 use lazy_static::lazy_static;
 use pbkdf2::password_hash::rand_core::OsRng;
 use pbkdf2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
@@ -55,24 +54,6 @@ async fn generate_session_token(random: Arc<Mutex<ChaCha8Rng>>) -> String {
         random.fill_bytes(&mut u128_pool);
     }
     u128::from_le_bytes(u128_pool).to_string()
-}
-
-// Can be improved by changing "=" to startswith and string slicing.
-fn get_cookie_with_key(cookies: &str, cookie_key: &str) -> Result<String, ApiError> {
-    let (_, cookie_value) = cookies
-        .split(";")
-        .map(|cookie_pair| {
-            cookie_pair
-                .trim()
-                .split("=")
-                .collect_tuple::<(&str, &str)>()
-                .ok_or(ApiError::MissingSessionTokenInClientRequest)
-        })
-        .filter(|result| result.as_ref().is_ok_and(|(key, _)| *key == cookie_key))
-        .next()
-        .ok_or(ApiError::MissingSessionTokenInClientRequest)??;
-
-    Ok(cookie_value.to_string())
 }
 
 fn extract_token(headers: &HeaderMap) -> Result<String, ApiError> {
@@ -176,4 +157,27 @@ pub async fn check_session_token<T>(
     let user_session = state.database.get_session_with_token(&token).await?;
     request.extensions_mut().insert(CurrentUser(user_session));
     Ok(next.run(request).await)
+}
+
+fn get_cookie_with_key(cookies: &str, cookie_key: &str) -> Result<String, ApiError> {
+    let cookie_value = cookies
+        .split(";")
+        .map(|cookie| cookie.trim())
+        .find(|cookie| cookie.starts_with(cookie_key))
+        .ok_or(ApiError::MissingSessionTokenInClientRequest)?;
+
+    let cookie_value = cookie_value
+        .get(cookie_key.len() + 1..cookie_value.len())
+        .ok_or(ApiError::TokenProcessing)?;
+
+    Ok(cookie_value.to_string())
+}
+
+#[test]
+fn test_token_extractor() {
+    let raw_token =
+        "hi=123; timecapsule_session_token=5727209675184565786134592316200670339; by=456";
+    let result = "5727209675184565786134592316200670339";
+    let token = get_cookie_with_key(raw_token, "timecapsule_session_token").unwrap();
+    assert_eq!(result, token)
 }

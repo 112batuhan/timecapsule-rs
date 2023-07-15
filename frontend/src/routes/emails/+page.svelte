@@ -81,6 +81,26 @@
 		}
 	}
 
+	async function hideMail(email_id: string) {
+		try {
+			const res = await fetch(PUBLIC_BACKEND_URL + '/email/' + email_id + '/hide', {
+				method: 'PATCH',
+				credentials: 'include'
+			});
+
+			if (res.status == 401) {
+				$loginStore = LoginState.Not;
+				goto('/');
+			} else if (res.status == 403) {
+				console.error("Trying to hide a mail that doesn't belong to you!");
+			} else {
+				await fetchMails();
+			}
+		} catch (error) {
+			console.error(error);
+		}
+	}
+
 	onMount(async () => await fetchMails());
 
 	let emails: any = [];
@@ -105,13 +125,13 @@
 		}
 	}
 
-	function triggerModal(mailId: string) {
+	function triggerDeleteModal(mailId: string) {
 		new Promise<string>((resolve) => {
 			const modal: ModalSettings = {
 				type: 'confirm',
 
 				title: 'Please confirm the deletion.',
-				body: 'Are you sure you want to delete the e-mail? It will be deleted forever.',
+				body: 'Are you sure you want to delete this e-mail? It will be deleted forever.',
 				response: (r: boolean) => {
 					if (r) {
 						resolve(mailId);
@@ -121,6 +141,27 @@
 			modalStore.trigger(modal);
 		}).then((mailId: string) => {
 			deleteMail(mailId);
+		});
+	}
+
+	function triggerHideModal(mailId: string) {
+		new Promise<string>((resolve) => {
+			const modal: ModalSettings = {
+				type: 'confirm',
+
+				title: 'Please confirm the hiding.',
+				body: `Are you sure you want to hide this e-mail? 
+						You won't be able to see, edit or duplicate this e-mail. 
+						After hiding the e-mail, only deleting is allowed.`,
+				response: (r: boolean) => {
+					if (r) {
+						resolve(mailId);
+					}
+				}
+			};
+			modalStore.trigger(modal);
+		}).then((mailId: string) => {
+			hideMail(mailId);
 		});
 	}
 
@@ -158,19 +199,22 @@
 					</svelte:fragment>
 					<svelte:fragment slot="content"
 						><div class="justify-self-center flex flex-wrap justify-center">
+							{#if !email.is_hidden || email.is_sent}
+								<button
+									class="btn variant-filled-primary p-1 m-1"
+									on:click={async () => await duplicateMail(email.id)}
+								>
+									<DuplicateSVG class="w-5 h-5 mx-5" />
+								</button>
+							{/if}
+
 							<button
 								class="btn variant-filled-primary p-1 m-1"
-								on:click={async () => await duplicateMail(email.id)}
-							>
-								<DuplicateSVG class="w-5 h-5 mx-5" />
-							</button>
-							<button
-								class="btn variant-filled-primary p-1 m-1"
-								on:click={() => triggerModal(email.id)}
+								on:click={() => triggerDeleteModal(email.id)}
 							>
 								<DeleteSVG class="w-5 h-5 mx-5" />
 							</button>
-							{#if !email.is_sent}
+							{#if !email.is_hidden && !email.is_sent}
 								<button
 									class="btn variant-filled-primary p-1 m-1"
 									on:click={() => {
@@ -180,29 +224,43 @@
 								>
 									<EditSVG class="w-5 h-5 mx-5" />
 								</button>
-								<button class="btn variant-filled-primary p-1 m-1">
+							{/if}
+							{#if !email.is_hidden && !email.is_sent}
+								<button
+									class="btn variant-filled-primary p-1 m-1"
+									on:click={() => triggerHideModal(email.id)}
+								>
 									<HideSVG class="w-5 h-5 mx-5" />
 								</button>
+							{/if}
+							{#if !email.is_hidden && !email.is_sent}
 								<button class="btn variant-filled-primary p-1 m-1">
 									<EmailSendSVG class="w-7 h-7 mx-5" />
 								</button>
 							{/if}
 						</div>
-						<div
-							style="border-radius:0.3rem; background-color:#c2a6f5; 100%; height: 350px; overflow: hidden;"
-						>
-							{#if email.is_html}
-								<iframe
-									style="max-width: 100%; max-height: 100%; width: 100%; height: 100%;"
-									title="preview"
-									srcdoc={email.body}
-								/>{:else}
-								<iframe
-									style="max-width: 100%; max-height: 100%; width: 100%; height: 100%; text-color:#000000;"
-									title="preview"
-									srcdoc={email.body}
-								/>{/if}
-						</div>
+						{#if !email.is_hidden || email.is_sent}
+							{#if email.is_sent}
+								<div class="text-center">This e-mail has already been sent.</div>
+							{/if}
+							<div
+								style="border-radius:0.3rem; background-color:#c2a6f5; 100%; height: 350px; overflow: hidden;"
+							>
+								{#if email.is_html}
+									<iframe
+										style="max-width: 100%; max-height: 100%; width: 100%; height: 100%;"
+										title="preview"
+										srcdoc={email.body}
+									/>{:else}
+									<iframe
+										style="max-width: 100%; max-height: 100%; width: 100%; height: 100%; text-color:#000000;"
+										title="preview"
+										srcdoc={email.body}
+									/>{/if}
+							</div>
+						{:else}
+							<div class="text-center">This e-mail has been hidden.</div>
+						{/if}
 					</svelte:fragment>
 				</AccordionItem>
 			{/each}

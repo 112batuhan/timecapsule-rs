@@ -75,6 +75,13 @@ impl Db {
         Ok(email.update(&self.pg_con).await?)
     }
 
+    pub async fn hide_email(&self, email: emails::Model) -> Result<emails::Model, DbError> {
+        let mut email: emails::ActiveModel = email.into();
+        email.is_hidden = Set(true);
+
+        Ok(email.update(&self.pg_con).await?)
+    }
+
     pub async fn duplicate_email(&self, email: emails::Model) -> Result<emails::Model, DbError> {
         let new_subject = format!("copy of {}", email.subject);
         let mut email: emails::ActiveModel = email.into();
